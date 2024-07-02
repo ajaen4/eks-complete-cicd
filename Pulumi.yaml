@@ -1,0 +1,4 @@
+name: grafana-kubernetes
+runtime: go
+description: a simple EKS cluster
+config:

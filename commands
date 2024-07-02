@@ -1,0 +1,4 @@
+act -P ubuntu-latest=catthehacker/ubuntu:act-22.04 --job preview --secret-file .github/.env
+aws s3api list-objects-v2 --bucket sityex-data-bucket --prefix silver/cities/weather/ --delimiter "/" | jq -r '.CommonPrefixes[] | .Prefix' | wc -l
+pulumi stack export | jq '.deployment.resources[] | .urn'
+pulumi destroy -t "urn:pulumi:main::SityEx-Backend::aws:ec2/natGateway:NatGateway::main-vpc-nat-gateway" --target-dependents
