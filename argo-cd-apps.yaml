@@ -1,0 +1,5 @@
+applications:
+  - name: monitoring
+    repoURL: https://github.com/ajaen4/kube-pulumi-cdk8s
+    path: k8s/dist
+    branch: main

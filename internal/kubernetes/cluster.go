@@ -3,15 +3,18 @@ package kubernetes
 import (
 	"encoding/json"
 	"log"
+	"os"
 
 	"github.com/pulumi/pulumi-aws/sdk/v5/go/aws/iam"
 	aws_eks "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/eks"
 	eks "github.com/pulumi/pulumi-eks/sdk/go/eks"
-	"github.com/pulumi/pulumi-kubernetes/sdk/v3/go/kubernetes"
+	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
+	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/apiextensions"
 	k8s "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/core/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3"
 	k8s_meta "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/meta/v1"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+	"gopkg.in/yaml.v2"
 )
 
 type Cluster struct {
@@ -162,7 +165,7 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 
 	_, err = helm.NewChart(
 		ctx,
-		"argocd",
+		"argo-cd",
 		helm.ChartArgs{
 			Namespace: cicdNsName,
 			Chart:     pulumi.String("argo-cd"),
@@ -175,6 +178,48 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 	)
 	if err != nil {
 		log.Fatal(err)
+	}
+
+	argocdApps, err := os.ReadFile("argo-cd-apps.yaml")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	argocdAppsFmt := map[string][]map[string]string{}
+	err = yaml.Unmarshal(argocdApps, argocdAppsFmt)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	for _, app := range argocdAppsFmt["applications"] {
+		_, err = apiextensions.NewCustomResource(
+			ctx,
+			"monitoring-app-cicd",
+			&apiextensions.CustomResourceArgs{
+				ApiVersion: pulumi.String("argoproj.io/v1alpha1"),
+				Kind:       pulumi.String("Application"),
+				Metadata: k8s_meta.ObjectMetaArgs{
+					Name:      pulumi.String(app["name"]),
+					Namespace: cicdNsName,
+				},
+				OtherFields: map[string]any{
+					"spec": map[string]any{
+						"project": "default",
+						"source": map[string]any{
+							"repoURL":        app["repoURL"],
+							"path":           app["path"],
+							"targetRevision": app["branch"],
+						},
+						"destination": map[string]any{
+							"server": "https://kubernetes.default.svc",
+						},
+					},
+				},
+			}, pulumi.Provider(kubeProvider))
+
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
 	return &Cluster{

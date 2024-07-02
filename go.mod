@@ -8,7 +8,6 @@ require (
 	github.com/pulumi/pulumi-aws/sdk/v5 v5.31.0
 	github.com/pulumi/pulumi-aws/sdk/v6 v6.41.0
 	github.com/pulumi/pulumi-eks/sdk v1.0.4
-	github.com/pulumi/pulumi-kubernetes/sdk/v3 v3.17.0
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.13.1
 	github.com/pulumi/pulumi/sdk/v3 v3.121.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -66,6 +65,7 @@ require (
 	github.com/pkg/term v1.1.0 // indirect
 	github.com/pulumi/appdash v0.0.0-20231130102222-75f619a67231 // indirect
 	github.com/pulumi/esc v0.9.1 // indirect
+	github.com/pulumi/pulumi-kubernetes/sdk/v3 v3.17.0 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
 	github.com/rogpeppe/go-internal v1.11.0 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
