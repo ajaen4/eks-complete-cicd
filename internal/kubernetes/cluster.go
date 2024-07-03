@@ -10,9 +10,11 @@ import (
 	eks "github.com/pulumi/pulumi-eks/sdk/go/eks"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/apiextensions"
+	batchv1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/batch/v1"
 	k8s "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/core/v1"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/helm/v3"
 	k8s_meta "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/meta/v1"
+	rbacv1 "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/rbac/v1"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 	"gopkg.in/yaml.v2"
 )
@@ -88,15 +90,16 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 		log.Fatal(err)
 	}
 
-	_, err = eks.NewNodeGroupV2(
+	nodeGroup, err := eks.NewNodeGroupV2(
 		ctx,
 		"fixed-node-group",
 		&eks.NodeGroupV2Args{
 			Cluster:         cluster,
-			InstanceType:    pulumi.String("t2.medium"),
+			InstanceType:    pulumi.String("t4g.small"),
+			AmiType:         pulumi.String("amazon-linux-2-arm64"),
 			DesiredCapacity: pulumi.Int(5),
-			MinSize:         pulumi.Int(3),
-			MaxSize:         pulumi.Int(5),
+			MinSize:         pulumi.Int(5),
+			MaxSize:         pulumi.Int(7),
 			Labels: map[string]string{
 				"ondemand": "true",
 			},
@@ -110,12 +113,13 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 		ctx,
 		"aws-eks-addon-csi",
 		&aws_eks.AddonArgs{
-			ClusterName:      clusterName,
-			AddonName:        pulumi.String("aws-ebs-csi-driver"),
-			AddonVersion:     pulumi.String("v1.31.0-eksbuild.1"),
-			ResolveConflicts: pulumi.String("OVERWRITE"),
+			ClusterName:              clusterName,
+			AddonName:                pulumi.String("aws-ebs-csi-driver"),
+			AddonVersion:             pulumi.String("v1.31.0-eksbuild.1"),
+			ResolveConflictsOnCreate: pulumi.String("OVERWRITE"),
+			ResolveConflictsOnUpdate: pulumi.String("OVERWRITE"),
 		},
-		pulumi.DependsOn([]pulumi.Resource{cluster}),
+		pulumi.DependsOn([]pulumi.Resource{nodeGroup}),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -125,12 +129,13 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 		ctx,
 		"aws-eks-addon-cni",
 		&aws_eks.AddonArgs{
-			ClusterName:      clusterName,
-			AddonName:        pulumi.String("vpc-cni"),
-			AddonVersion:     pulumi.String("v1.18.2-eksbuild.1"),
-			ResolveConflicts: pulumi.String("OVERWRITE"),
+			ClusterName:              clusterName,
+			AddonName:                pulumi.String("vpc-cni"),
+			AddonVersion:             pulumi.String("v1.18.2-eksbuild.1"),
+			ResolveConflictsOnCreate: pulumi.String("OVERWRITE"),
+			ResolveConflictsOnUpdate: pulumi.String("OVERWRITE"),
 		},
-		pulumi.DependsOn([]pulumi.Resource{cluster}),
+		pulumi.DependsOn([]pulumi.Resource{nodeGroup}),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -162,6 +167,108 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	clusterRole, err := rbacv1.NewClusterRole(
+		ctx,
+		"crd-patch-clusterrole",
+		&rbacv1.ClusterRoleArgs{
+			Metadata: &k8s_meta.ObjectMetaArgs{
+				Name:      pulumi.String("crd-patch-clusterrole"),
+				Namespace: cicdNsName,
+			},
+			Rules: rbacv1.PolicyRuleArray{
+				&rbacv1.PolicyRuleArgs{
+					ApiGroups: pulumi.StringArray{
+						pulumi.String("apiextensions.k8s.io"),
+					},
+					Resources: pulumi.StringArray{
+						pulumi.String("customresourcedefinitions"),
+					},
+					Verbs: pulumi.StringArray{
+						pulumi.String("get"),
+						pulumi.String("list"),
+						pulumi.String("watch"),
+						pulumi.String("patch"),
+						pulumi.String("update"),
+						pulumi.String("create"),
+					},
+				},
+			},
+		},
+		pulumi.Provider(kubeProvider),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	roleBinding, err := rbacv1.NewClusterRoleBinding(
+		ctx,
+		"crd-patch-clusterrolebinding",
+		&rbacv1.ClusterRoleBindingArgs{
+			Metadata: &k8s_meta.ObjectMetaArgs{
+				Name:      pulumi.String("crd-patch-clusterrole-binding"),
+				Namespace: cicdNsName,
+			},
+			Subjects: rbacv1.SubjectArray{
+				&rbacv1.SubjectArgs{
+					Kind:      pulumi.String("ServiceAccount"),
+					Name:      pulumi.String("default"),
+					Namespace: cicdNsName,
+				},
+			},
+			RoleRef: &rbacv1.RoleRefArgs{
+				Kind:     pulumi.String("ClusterRole"),
+				Name:     pulumi.String("crd-patch-clusterrole"),
+				ApiGroup: pulumi.String("rbac.authorization.k8s.io"),
+			},
+		},
+		pulumi.Provider(kubeProvider),
+		pulumi.DependsOn([]pulumi.Resource{clusterRole}),
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	batchv1.NewJob(
+		ctx,
+		"cluster-init-job",
+		&batchv1.JobArgs{
+			ApiVersion: pulumi.String("batch/v1"),
+			Kind:       pulumi.String("Job"),
+			Metadata: k8s_meta.ObjectMetaArgs{
+				Name:      pulumi.String("cluster-init-job"),
+				Namespace: cicdNsName,
+			},
+			Spec: batchv1.JobSpecArgs{
+				Template: k8s.PodTemplateSpecArgs{
+					Spec: k8s.PodSpecArgs{
+						Containers: k8s.ContainerArray{
+							k8s.ContainerArgs{
+								Name:    pulumi.String("cluster-init-job"),
+								Image:   pulumi.String("bitnami/kubectl:latest"),
+								Command: pulumi.StringArray{pulumi.String("/bin/sh"), pulumi.String("-c")},
+								Args: pulumi.StringArray{
+									pulumi.String(`kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagerconfigs.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_alertmanagers.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_podmonitors.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_probes.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheusagents.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheuses.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_prometheusrules.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_scrapeconfigs.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_servicemonitors.yaml && \
+									kubectl apply --server-side -f https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/v0.75.0/example/prometheus-operator-crd/monitoring.coreos.com_thanosrulers.yaml`),
+								},
+							},
+						},
+						RestartPolicy: pulumi.String("OnFailure"),
+					},
+				},
+			},
+		},
+		pulumi.Provider(kubeProvider),
+		pulumi.DependsOn([]pulumi.Resource{roleBinding}),
+	)
 
 	_, err = helm.NewChart(
 		ctx,
@@ -215,7 +322,9 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 						},
 					},
 				},
-			}, pulumi.Provider(kubeProvider))
+			},
+			pulumi.Provider(kubeProvider),
+		)
 
 		if err != nil {
 			log.Fatal(err)
