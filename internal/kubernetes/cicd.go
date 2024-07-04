@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"log"
 	"os"
+	"os/exec"
 
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/apiextensions"
@@ -42,6 +43,21 @@ func NewCICD(ctx *pulumi.Context, kubeProvider *kubernetes.Provider) *CICD {
 		log.Fatal(err)
 	}
 
+	repos := map[string]string{
+		"argocd": "https://argoproj.github.io/argo-helm",
+	}
+	for name, url := range repos {
+		err = exec.Command("helm", "repo", "add", name, url).Run()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	err = exec.Command("helm", "repo", "update").Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	argocdChart, err := helm.NewChart(
 		ctx,
 		"argo-cd",
@@ -50,7 +66,7 @@ func NewCICD(ctx *pulumi.Context, kubeProvider *kubernetes.Provider) *CICD {
 			Chart:     pulumi.String("argo-cd"),
 			Version:   pulumi.String("7.3.3"),
 			FetchArgs: helm.FetchArgs{
-				Repo: pulumi.String("https://argoproj.github.io/argo-helm"),
+				Repo: pulumi.String(repos["argocd"]),
 			},
 		},
 		pulumi.Provider(cicd.kubeProvider),

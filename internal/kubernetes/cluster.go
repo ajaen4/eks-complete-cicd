@@ -173,6 +173,7 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 				},
 			},
 		},
+		pulumi.Provider(kubeProvider),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -200,6 +201,7 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 			},
 		},
 		pulumi.DependsOn([]pulumi.Resource{initRole}),
+		pulumi.Provider(kubeProvider),
 	)
 	if err != nil {
 		log.Fatal(err)
@@ -241,6 +243,7 @@ func NewCluster(ctx *pulumi.Context) *Cluster {
 				},
 			},
 		},
+		pulumi.Provider(kubeProvider),
 		pulumi.DependsOn([]pulumi.Resource{roleBinding}),
 	)
 	if err != nil {
