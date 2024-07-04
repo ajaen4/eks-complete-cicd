@@ -8,7 +8,8 @@ import (
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
-		kubernetes.NewCluster(ctx)
+		cluster := kubernetes.NewCluster(ctx)
+		kubernetes.NewCICD(ctx, cluster.KubeProvider)
 		return nil
 	})
 }
