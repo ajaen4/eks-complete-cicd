@@ -6,9 +6,7 @@ import (
 
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes"
 	"github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/apiextensions"
-	"github.com/pulumi/pulumi-null/sdk/go/null"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
-	"github.com/pulumiverse/pulumi-time/sdk/go/time"
 	"gopkg.in/yaml.v2"
 
 	k8s "github.com/pulumi/pulumi-kubernetes/sdk/v4/go/kubernetes/core/v1"
@@ -62,27 +60,6 @@ func NewCICD(ctx *pulumi.Context, kubeProvider *kubernetes.Provider) *CICD {
 		log.Fatal(err)
 	}
 
-	wait, err := time.NewSleep(
-		ctx,
-		"wait",
-		&time.SleepArgs{
-			DestroyDuration: pulumi.String("10s"),
-		},
-		pulumi.DependsOn([]pulumi.Resource{argocdChart}),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-	_, err = null.NewResource(
-		ctx,
-		"next",
-		nil,
-		pulumi.DependsOn([]pulumi.Resource{wait}),
-	)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	argocdApps, err := os.ReadFile("argo-cd-apps.yaml")
 	if err != nil {
 		log.Fatal(err)
@@ -94,12 +71,12 @@ func NewCICD(ctx *pulumi.Context, kubeProvider *kubernetes.Provider) *CICD {
 		log.Fatal(err)
 	}
 
-	cicd.createArgoApps(argocdAppsFmt["applications"], wait)
+	cicd.createArgoApps(argocdAppsFmt["applications"], argocdChart)
 
 	return cicd
 }
 
-func (cicd *CICD) createArgoApps(argoApps []map[string]string, wait *time.Sleep) {
+func (cicd *CICD) createArgoApps(argoApps []map[string]string, argocdChart *helm.Chart) {
 	for _, app := range argoApps {
 		_, err := apiextensions.NewCustomResource(
 			cicd.ctx,
@@ -126,7 +103,7 @@ func (cicd *CICD) createArgoApps(argoApps []map[string]string, wait *time.Sleep)
 				},
 			},
 			pulumi.Provider(cicd.kubeProvider),
-			pulumi.DependsOn([]pulumi.Resource{wait}),
+			pulumi.DependsOnInputs(argocdChart.Ready),
 		)
 
 		if err != nil {
