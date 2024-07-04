@@ -60,7 +60,7 @@ Follow the instructions [here](https://cdk8s.io/docs/latest/get-started/) to get
 As explained in the Workflow section, we can define all our Kubernetes stacks in the file "argo-cd-apps.yaml". Each entry of the file has the following required properties:
 
 - name: Name of the application inside Argo CD. Example: monitoring.
-- repoURL: URL of the repo that Argo CD will connect to. Example:: https://github.com/ajaen4/eks-complete-cicd.
+- repoURL: URL of the repo that Argo CD will connect to. Example: https://github.com/ajaen4/eks-complete-cicd.
 - path: path where the Kubernetes manifests are located. Example: k8s/dist.
 - branch: specific branch of the repo to target. Example: main.
 
