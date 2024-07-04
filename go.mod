@@ -9,9 +9,7 @@ require (
 	github.com/pulumi/pulumi-aws/sdk/v6 v6.41.0
 	github.com/pulumi/pulumi-eks/sdk v1.0.4
 	github.com/pulumi/pulumi-kubernetes/sdk/v4 v4.13.1
-	github.com/pulumi/pulumi-null/sdk v0.0.4
 	github.com/pulumi/pulumi/sdk/v3 v3.121.0
-	github.com/pulumiverse/pulumi-time/sdk v0.0.17
 	gopkg.in/yaml.v2 v2.4.0
 )
 
