@@ -4,7 +4,7 @@
 
 This project deploys a completely automatized EKS cluster leveraging Pulumi, Argo CD and CDK8s. The aim is to be able to automatically deploy a Kubernetes cluster with a single Pulumi deployment and set up the CI/CD for any Kubernetes application through Argo CD. We have used a CDK8s stack located in this same repo as an example of a Kubernetes app deployment.
 
-So in other words, we want all configuration and deployments to be automatic, 0 manual configuration. We are also using tools that provide us with the ability to use general purpose programing languages, which provide more flexibility and integration that YAML or Domain Specific Languages.
+So in other words, we want all configuration and deployments to be automatic, 0 manual configuration. We are also using tools that provide us with the ability to use general purpose programing languages, which provide more flexibility and integration than YAML or Domain Specific Languages.
 
 ## Architecture
 
@@ -45,7 +45,9 @@ As a first step the Pulumi application is deployed, setting up an EKS cluster on
 
 The file "argo-cd-apps.yaml" defines in a simple manner the Kubernetes stacks that need to be deployed. In this example we have defined a CDK8s stack defined in this same repo in the "k8s" folder. It contains the necessary components to monitor a Kubernetes cluster: a metrics server to serve the cluster's metrics, a Prometheus server to store these and a Grafana server to display them.
 
-In this file you can define any app you may like, you just need to add the config to the array. It is important to note that it doesn't need to be a CDK8s application, the only requirement is that all Kubernetes manifests are stored in a folder where our Argo CD server can find them.
+In the "argo-cd-apps.yaml" file you can define any app you may like, you just need to add the config to the array. It is important to note that it doesn't need to be a CDK8s application, the only requirement is that all Kubernetes manifests are stored in a folder where our Argo CD server can find them. Every registry found is then deployed with Pulumi as an Argo Kubernetes CRD to be registered as an Argo Application.
+
+From this moment on Argo can deploy the Kubernetes applications found in each targeted repo. The applications are set to be deployed manually, so in order to deploy them you must log in to the Argo CD UI and click on synchronize. This is for simplicity purposses but this setting can be changed easily.
 
 ## Installation
 
@@ -64,7 +66,7 @@ As explained in the Workflow section, we can define all our Kubernetes stacks in
 - path: path where the Kubernetes manifests are located. Example: k8s/dist.
 - branch: specific branch of the repo to target. Example: main.
 
-Once you have filled the necessary entries we can move on to deploy the EKS cluster.
+Once the necessary entries have been filled we can move on to deploy the EKS cluster.
 
 ### 2. Pulumi deployment
 
@@ -144,6 +146,11 @@ This will generate all our Kubernetes manifests in the dist/ folder (which is th
 
 This may take a while. Once finished all our infra and applications have been deployed!
 
+## Possible improvements
+
+- Enrich the Argo CD application definition in the "argo-cd-apps.yaml".
+- Change the service type for the Argo CD server to be public so a port-forwarding connection is not needed.
+- Move the cluster init job script to a separate file so it can't modified easily.
 
 ## License
 
